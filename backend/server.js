@@ -7,7 +7,7 @@ const { v4: uuidv4 } = require('uuid');
 const rateLimit = require('express-rate-limit');
 
 const app = express();
-const PORT = 3000;
+const PORT = 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_change_in_production';
 
 app.use(cors());
