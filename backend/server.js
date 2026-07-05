@@ -34,8 +34,14 @@ db.serialize(() => {
         key TEXT UNIQUE,
         machine_id TEXT,
         active BOOLEAN DEFAULT 1,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        expires_at DATETIME DEFAULT NULL
     )`);
+
+    // Add expires_at column if upgrading from old schema
+    db.run(`ALTER TABLE licenses ADD COLUMN expires_at DATETIME DEFAULT NULL`, (err) => {
+        // Ignore error if column already exists
+    });
 
     // Create default admin if not exists (username: admin, password: password123)
     db.get("SELECT * FROM admin WHERE username = 'admin'", async (err, row) => {
@@ -63,7 +69,7 @@ const authenticateJWT = (req, res, next) => {
 // Rate Limiter for Verify Endpoint
 const verifyLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 50, // limit each IP to 50 requests per windowMs
+    max: 50,
     message: "Too many verification attempts, please try again later"
 });
 
@@ -85,17 +91,25 @@ app.post('/api/admin/login', (req, res) => {
 });
 
 // Generate License (Admin Only)
+// Body: { days: 365 }  → optional, defaults to 365 days
 app.post('/api/admin/generate', authenticateJWT, (req, res) => {
     const key = 'LIC-' + uuidv4().toUpperCase();
-    db.run("INSERT INTO licenses (key) VALUES (?)", [key], function(err) {
+    const days = parseInt(req.body.days) || 365;
+    
+    // Calculate expiry date
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + days);
+    const expiresAtStr = expiresAt.toISOString();
+
+    db.run("INSERT INTO licenses (key, expires_at) VALUES (?, ?)", [key, expiresAtStr], function(err) {
         if (err) return res.status(500).json({ error: err.message });
-        res.json({ success: true, key });
+        res.json({ success: true, key, expires_at: expiresAtStr });
     });
 });
 
 // List Licenses (Admin Only)
 app.get('/api/admin/licenses', authenticateJWT, (req, res) => {
-    db.all("SELECT * FROM licenses", (err, rows) => {
+    db.all("SELECT * FROM licenses ORDER BY id DESC", (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows);
     });
@@ -119,6 +133,30 @@ app.post('/api/admin/revoke', authenticateJWT, (req, res) => {
     });
 });
 
+// Extend License Expiry (Admin Only)
+// Body: { key: "LIC-...", days: 90 }
+app.post('/api/admin/extend', authenticateJWT, (req, res) => {
+    const { key, days } = req.body;
+    if (!key || !days) return res.status(400).json({ error: 'Missing key or days' });
+
+    db.get("SELECT expires_at FROM licenses WHERE key = ?", [key], (err, row) => {
+        if (err || !row) return res.status(404).json({ error: 'License not found' });
+
+        // Extend from today or from current expiry (whichever is later)
+        const base = row.expires_at && new Date(row.expires_at) > new Date()
+            ? new Date(row.expires_at)
+            : new Date();
+
+        base.setDate(base.getDate() + parseInt(days));
+        const newExpiry = base.toISOString();
+
+        db.run("UPDATE licenses SET expires_at = ? WHERE key = ?", [newExpiry, key], function(err) {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true, new_expiry: newExpiry });
+        });
+    });
+});
+
 // Verify License (Used by Python App)
 app.post('/api/verify', verifyLimiter, (req, res) => {
     const { key, machine_id } = req.body;
@@ -127,6 +165,14 @@ app.post('/api/verify', verifyLimiter, (req, res) => {
     db.get("SELECT * FROM licenses WHERE key = ?", [key], (err, row) => {
         if (err || !row) return res.json({ valid: false, message: 'Invalid license key' });
         if (!row.active) return res.json({ valid: false, message: 'License revoked' });
+
+        // Check expiry
+        if (row.expires_at) {
+            const expiry = new Date(row.expires_at);
+            if (expiry < new Date()) {
+                return res.json({ valid: false, message: 'License expired on ' + expiry.toDateString() });
+            }
+        }
 
         if (!row.machine_id) {
             // First time use, bind machine ID

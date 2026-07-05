@@ -7,26 +7,28 @@
 </head>
 <body class="bg-gray-50 min-h-screen">
     <nav class="bg-white shadow px-6 py-4 flex justify-between items-center">
-        <h1 class="text-xl font-bold text-gray-800">License Manager</h1>
+        <h1 class="text-xl font-bold text-gray-800">🔑 License Manager</h1>
         <button onclick="logout()" class="text-red-600 hover:underline">Logout</button>
     </nav>
 
-    <main class="max-w-6xl mx-auto p-6">
+    <main class="max-w-7xl mx-auto p-6">
         <div class="flex justify-between items-center mb-6">
             <h2 class="text-2xl font-semibold">Active Licenses</h2>
-            <button onclick="generateLicense()" class="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 transition">
+            <button onclick="openGenerateModal()" class="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 transition">
                 + Generate New License
             </button>
         </div>
 
-        <div class="bg-white rounded shadow overflow-hidden">
-            <table class="w-full text-left border-collapse">
+        <div class="bg-white rounded shadow overflow-x-auto">
+            <table class="w-full text-left border-collapse text-sm">
                 <thead class="bg-gray-100 text-gray-600">
                     <tr>
                         <th class="p-4 border-b">ID</th>
                         <th class="p-4 border-b">License Key</th>
                         <th class="p-4 border-b">Bound Machine ID</th>
                         <th class="p-4 border-b">Status</th>
+                        <th class="p-4 border-b">Expiry Date</th>
+                        <th class="p-4 border-b">Created</th>
                         <th class="p-4 border-b">Actions</th>
                     </tr>
                 </thead>
@@ -37,52 +39,187 @@
         </div>
     </main>
 
+    <!-- Generate License Modal -->
+    <div id="generate-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-96">
+            <h3 class="text-lg font-bold mb-4">Generate New License</h3>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Validity (days)</label>
+            <select id="gen-days" class="w-full border rounded px-3 py-2 mb-4">
+                <option value="30">30 days (1 Month)</option>
+                <option value="90">90 days (3 Months)</option>
+                <option value="180">180 days (6 Months)</option>
+                <option value="365" selected>365 days (1 Year)</option>
+                <option value="730">730 days (2 Years)</option>
+                <option value="custom">Custom...</option>
+            </select>
+            <div id="custom-days-wrapper" class="hidden mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Custom Days</label>
+                <input type="number" id="custom-days" min="1" placeholder="e.g. 60" class="w-full border rounded px-3 py-2" />
+            </div>
+            <div class="flex justify-end gap-3">
+                <button onclick="closeGenerateModal()" class="px-4 py-2 text-gray-600 hover:underline">Cancel</button>
+                <button onclick="generateLicense()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Generate</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Extend Expiry Modal -->
+    <div id="extend-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-96">
+            <h3 class="text-lg font-bold mb-1">Extend License Expiry</h3>
+            <p id="extend-key-label" class="text-xs text-gray-500 font-mono mb-4 break-all"></p>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Extend by (days)</label>
+            <select id="extend-days" class="w-full border rounded px-3 py-2 mb-4">
+                <option value="30">30 days</option>
+                <option value="90">90 days</option>
+                <option value="180">180 days</option>
+                <option value="365" selected>365 days</option>
+                <option value="custom">Custom...</option>
+            </select>
+            <div id="extend-custom-wrapper" class="hidden mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Custom Days</label>
+                <input type="number" id="extend-custom-days" min="1" placeholder="e.g. 60" class="w-full border rounded px-3 py-2" />
+            </div>
+            <div class="flex justify-end gap-3">
+                <button onclick="closeExtendModal()" class="px-4 py-2 text-gray-600 hover:underline">Cancel</button>
+                <button onclick="submitExtend()" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">Extend</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const token = localStorage.getItem('token');
         if (!token) window.location.href = 'login.html';
 
+        let currentExtendKey = null;
+
+        // ── Modal: Generate ─────────────────────────────────────────────
+        function openGenerateModal() {
+            document.getElementById('generate-modal').classList.remove('hidden');
+        }
+        function closeGenerateModal() {
+            document.getElementById('generate-modal').classList.add('hidden');
+        }
+        document.getElementById('gen-days').addEventListener('change', function() {
+            document.getElementById('custom-days-wrapper').classList.toggle('hidden', this.value !== 'custom');
+        });
+
+        // ── Modal: Extend ────────────────────────────────────────────────
+        function openExtendModal(key) {
+            currentExtendKey = key;
+            document.getElementById('extend-key-label').textContent = key;
+            document.getElementById('extend-modal').classList.remove('hidden');
+        }
+        function closeExtendModal() {
+            document.getElementById('extend-modal').classList.add('hidden');
+            currentExtendKey = null;
+        }
+        document.getElementById('extend-days').addEventListener('change', function() {
+            document.getElementById('extend-custom-wrapper').classList.toggle('hidden', this.value !== 'custom');
+        });
+
+        // ── Fetch & Render Licenses ──────────────────────────────────────
         async function fetchLicenses() {
             const res = await fetch('/api/admin/licenses', {
                 headers: { 'Authorization': 'Bearer ' + token }
             });
             if (res.status === 403 || res.status === 401) { logout(); return; }
-            
+
             const data = await res.json();
             const tbody = document.getElementById('table-body');
             tbody.innerHTML = '';
-            
+
             data.forEach(lic => {
-                const statusHtml = lic.active 
-                    ? `<span class="bg-green-100 text-green-800 px-2 py-1 rounded text-sm">Active</span>`
-                    : `<span class="bg-red-100 text-red-800 px-2 py-1 rounded text-sm">Revoked</span>`;
-                
-                const machineId = lic.machine_id ? lic.machine_id : '<span class="text-gray-400 italic">Unbound</span>';
+                const statusHtml = lic.active
+                    ? `<span class="bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-semibold">Active</span>`
+                    : `<span class="bg-red-100 text-red-800 px-2 py-1 rounded text-xs font-semibold">Revoked</span>`;
+
+                const machineId = lic.machine_id
+                    ? `<span class="font-mono text-xs">${lic.machine_id}</span>`
+                    : `<span class="text-gray-400 italic text-xs">Unbound</span>`;
+
+                // Expiry display
+                let expiryHtml = '<span class="text-gray-400 italic text-xs">No expiry</span>';
+                if (lic.expires_at) {
+                    const expDate = new Date(lic.expires_at);
+                    const now = new Date();
+                    const daysLeft = Math.ceil((expDate - now) / (1000 * 60 * 60 * 24));
+                    const dateStr = expDate.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+
+                    if (daysLeft < 0) {
+                        expiryHtml = `<span class="text-red-600 font-semibold text-xs">Expired (${dateStr})</span>`;
+                    } else if (daysLeft <= 30) {
+                        expiryHtml = `<span class="text-orange-500 font-semibold text-xs">⚠ ${dateStr} (${daysLeft}d left)</span>`;
+                    } else {
+                        expiryHtml = `<span class="text-green-700 text-xs">${dateStr} (${daysLeft}d left)</span>`;
+                    }
+                }
+
+                const createdStr = lic.created_at
+                    ? new Date(lic.created_at).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })
+                    : '—';
 
                 tbody.innerHTML += `
                     <tr class="border-b hover:bg-gray-50 transition">
-                        <td class="p-4">${lic.id}</td>
-                        <td class="p-4 font-mono">${lic.key}</td>
-                        <td class="p-4 font-mono text-sm">${machineId}</td>
+                        <td class="p-4 text-gray-500">${lic.id}</td>
+                        <td class="p-4 font-mono text-xs">${lic.key}</td>
+                        <td class="p-4">${machineId}</td>
                         <td class="p-4">${statusHtml}</td>
-                        <td class="p-4">
-                            <button onclick="resetMachine('${lic.key}')" class="text-orange-500 hover:underline mr-3 text-sm">Reset HWID</button>
-                            ${lic.active ? `<button onclick="revoke('${lic.key}')" class="text-red-600 hover:underline text-sm">Revoke</button>` : ''}
+                        <td class="p-4">${expiryHtml}</td>
+                        <td class="p-4 text-xs text-gray-500">${createdStr}</td>
+                        <td class="p-4 flex flex-wrap gap-2">
+                            <button onclick="openExtendModal('${lic.key}')" class="text-green-600 hover:underline text-xs">Extend</button>
+                            <button onclick="resetMachine('${lic.key}')" class="text-orange-500 hover:underline text-xs">Reset HWID</button>
+                            ${lic.active ? `<button onclick="revoke('${lic.key}')" class="text-red-600 hover:underline text-xs">Revoke</button>` : ''}
                         </td>
                     </tr>
                 `;
             });
         }
 
+        // ── Generate License ─────────────────────────────────────────────
         async function generateLicense() {
-            await fetch('/api/admin/generate', {
+            const select = document.getElementById('gen-days');
+            let days = select.value === 'custom'
+                ? parseInt(document.getElementById('custom-days').value)
+                : parseInt(select.value);
+
+            if (!days || days < 1) { alert('Please enter a valid number of days.'); return; }
+
+            const res = await fetch('/api/admin/generate', {
                 method: 'POST',
-                headers: { 'Authorization': 'Bearer ' + token }
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ days })
             });
+            const data = await res.json();
+            closeGenerateModal();
+            alert('✅ License Generated!\n\n' + data.key + '\n\nExpires: ' + new Date(data.expires_at).toDateString());
             fetchLicenses();
         }
 
+        // ── Extend Expiry ────────────────────────────────────────────────
+        async function submitExtend() {
+            const select = document.getElementById('extend-days');
+            let days = select.value === 'custom'
+                ? parseInt(document.getElementById('extend-custom-days').value)
+                : parseInt(select.value);
+
+            if (!days || days < 1) { alert('Please enter a valid number of days.'); return; }
+
+            const res = await fetch('/api/admin/extend', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ key: currentExtendKey, days })
+            });
+            const data = await res.json();
+            closeExtendModal();
+            alert('✅ License Extended!\n\nNew Expiry: ' + new Date(data.new_expiry).toDateString());
+            fetchLicenses();
+        }
+
+        // ── Reset HWID ───────────────────────────────────────────────────
         async function resetMachine(key) {
-            if(!confirm('Reset hardware lock for this license?')) return;
+            if (!confirm('Reset hardware lock for this license?')) return;
             await fetch('/api/admin/reset', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
@@ -91,8 +228,9 @@
             fetchLicenses();
         }
 
+        // ── Revoke ───────────────────────────────────────────────────────
         async function revoke(key) {
-            if(!confirm('Revoke this license permanently?')) return;
+            if (!confirm('Revoke this license permanently?')) return;
             await fetch('/api/admin/revoke', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
