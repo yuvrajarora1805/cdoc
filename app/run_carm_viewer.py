@@ -14,7 +14,7 @@ def verify_license(key):
     machine_id = get_machine_id()
     try:
         # Pointing to the Node.js API server
-        response = requests.post("http://localhost:3003/api/verify", json={
+        response = requests.post("http://lic.omvky.com/api/verify", json={
             "key": key,
             "machine_id": machine_id
         }, timeout=5)
