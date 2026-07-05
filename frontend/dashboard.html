@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard - License Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <nav class="bg-white shadow px-6 py-4 flex justify-between items-center">
+        <h1 class="text-xl font-bold text-gray-800">License Manager</h1>
+        <button onclick="logout()" class="text-red-600 hover:underline">Logout</button>
+    </nav>
+
+    <main class="max-w-6xl mx-auto p-6">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-2xl font-semibold">Active Licenses</h2>
+            <button onclick="generateLicense()" class="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 transition">
+                + Generate New License
+            </button>
+        </div>
+
+        <div class="bg-white rounded shadow overflow-hidden">
+            <table class="w-full text-left border-collapse">
+                <thead class="bg-gray-100 text-gray-600">
+                    <tr>
+                        <th class="p-4 border-b">ID</th>
+                        <th class="p-4 border-b">License Key</th>
+                        <th class="p-4 border-b">Bound Machine ID</th>
+                        <th class="p-4 border-b">Status</th>
+                        <th class="p-4 border-b">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body">
+                    <!-- Rows injected via JS -->
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <script>
+        const token = localStorage.getItem('token');
+        if (!token) window.location.href = 'login.html';
+
+        async function fetchLicenses() {
+            const res = await fetch('/api/admin/licenses', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (res.status === 403 || res.status === 401) { logout(); return; }
+            
+            const data = await res.json();
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+            
+            data.forEach(lic => {
+                const statusHtml = lic.active 
+                    ? `<span class="bg-green-100 text-green-800 px-2 py-1 rounded text-sm">Active</span>`
+                    : `<span class="bg-red-100 text-red-800 px-2 py-1 rounded text-sm">Revoked</span>`;
+                
+                const machineId = lic.machine_id ? lic.machine_id : '<span class="text-gray-400 italic">Unbound</span>';
+
+                tbody.innerHTML += `
+                    <tr class="border-b hover:bg-gray-50 transition">
+                        <td class="p-4">${lic.id}</td>
+                        <td class="p-4 font-mono">${lic.key}</td>
+                        <td class="p-4 font-mono text-sm">${machineId}</td>
+                        <td class="p-4">${statusHtml}</td>
+                        <td class="p-4">
+                            <button onclick="resetMachine('${lic.key}')" class="text-orange-500 hover:underline mr-3 text-sm">Reset HWID</button>
+                            ${lic.active ? `<button onclick="revoke('${lic.key}')" class="text-red-600 hover:underline text-sm">Revoke</button>` : ''}
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        async function generateLicense() {
+            await fetch('/api/admin/generate', {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            fetchLicenses();
+        }
+
+        async function resetMachine(key) {
+            if(!confirm('Reset hardware lock for this license?')) return;
+            await fetch('/api/admin/reset', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ key })
+            });
+            fetchLicenses();
+        }
+
+        async function revoke(key) {
+            if(!confirm('Revoke this license permanently?')) return;
+            await fetch('/api/admin/revoke', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ key })
+            });
+            fetchLicenses();
+        }
+
+        function logout() {
+            localStorage.removeItem('token');
+            window.location.href = 'login.html';
+        }
+
+        // Init
+        fetchLicenses();
+    </script>
+</body>
+</html>

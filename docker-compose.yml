@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: license_backend
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DB_PATH=/app/data/database.sqlite
+
+  frontend:
+    image: nginx:alpine
+    container_name: license_frontend
+    restart: unless-stopped
+    ports:
+      - "3003:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - backend
