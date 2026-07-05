@@ -53,8 +53,17 @@ def main():
         # Launch the actual application
         run()
     else:
-        messagebox.showerror("Invalid License", "The license key is invalid or expired.")
-        # Remove invalid key if it exists
+        # Show actual reason from server for easier debugging
+        try:
+            machine_id = get_machine_id()
+            response = requests.post("http://lic.omvky.com/api/verify", json={
+                "key": key, "machine_id": machine_id
+            }, timeout=5)
+            data = response.json()
+            reason = data.get("message", "Unknown error")
+        except Exception as e:
+            reason = str(e)
+        messagebox.showerror("Invalid License", f"License rejected.\n\nReason: {reason}")
         if os.path.exists(license_file):
             os.remove(license_file)
         sys.exit(1)
