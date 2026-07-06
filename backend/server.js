@@ -283,3 +283,60 @@ app.post('/api/verify', verifyLimiter, async (req, res) => {
         res.status(500).json({ valid: false, message: 'Server error: ' + err.message });
     }
 });
+
+// ── Generate Offline License File (Admin) ────────────────────────────────────
+app.post('/api/admin/generate-offline', authenticateJWT, async (req, res) => {
+    const { key, machine_id, expires_at } = req.body;
+    if (!key || !machine_id) return res.status(400).json({ error: 'Missing key or machine_id' });
+
+    try {
+        const [rows] = await pool.execute("SELECT * FROM licenses WHERE `key` = ?", [key]);
+        if (rows.length === 0) return res.status(404).json({ error: 'License key not found' });
+
+        const lic = rows[0];
+        if (!lic.active) return res.status(400).json({ error: 'License is revoked' });
+
+        // Check if already bound to a different machine
+        if (lic.machine_id && lic.machine_id !== machine_id) {
+            return res.status(400).json({ error: `License is already bound to machine: ${lic.machine_id}` });
+        }
+
+        // Bind machine_id if not already set
+        if (!lic.machine_id) {
+            await pool.execute("UPDATE licenses SET machine_id = ? WHERE `key` = ?", [machine_id, key]);
+        }
+
+        // Determine expiry string
+        let expiresAtStr = null;
+        if (expires_at) {
+            const expiry = new Date(expires_at);
+            if (expiry < new Date()) {
+                return res.status(400).json({ error: 'Expiry date is in the past' });
+            }
+            expiresAtStr = expiry.toISOString();
+        } else if (lic.expires_at) {
+            expiresAtStr = new Date(lic.expires_at).toISOString();
+        }
+
+        // Build and sign license payload
+        const licenseData = {
+            key: key,
+            machine_id: machine_id,
+            expires_at: expiresAtStr
+        };
+
+        const dataToSign = JSON.stringify(licenseData);
+        const sign = crypto.createSign('SHA256');
+        sign.update(dataToSign);
+        sign.end();
+        const signature = sign.sign(PRIVATE_KEY, 'hex');
+
+        res.json({
+            success: true,
+            license_data: licenseData,
+            signature: signature
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});

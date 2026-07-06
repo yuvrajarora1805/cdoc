@@ -375,6 +375,9 @@
                 <h2>🔑 License Keys</h2>
                 <div class="search-wrap">
                     <input id="search-box" class="search-input" type="text" placeholder="Search key or machine ID…" oninput="filterTable()">
+                    <button class="btn-primary" onclick="openOfflineModal()" style="background:#0891b2;">
+                        <span>⚙</span> Offline License
+                    </button>
                     <button class="btn-primary" onclick="openGenerateModal()">
                         <span>＋</span> Generate License
                     </button>
@@ -448,6 +451,51 @@
         </div>
     </div>
 
+    <!-- ── Offline License Modal ── -->
+    <div class="modal-overlay" id="offline-modal">
+        <div class="modal">
+            <h3>⚙ Generate Offline License</h3>
+            <div class="subtitle">Creates a signed <code style="color:#93c5fd">license.lic</code> file for a customer who cannot go online.</div>
+
+            <div class="form-group">
+                <div class="form-label">Customer Machine ID</div>
+                <input type="text" id="off-machine-id" class="form-input" placeholder="Paste Machine ID from customer (e.g. 123456789012)">
+                <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">The customer can find this by running HelixCare.exe on their machine.</div>
+            </div>
+
+            <div class="form-group">
+                <div class="form-label">License Key</div>
+                <select id="off-key" class="form-select">
+                    <option value="">— Select a license key —</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <div class="form-label">Expiry Override (optional)</div>
+                <div class="mode-tabs">
+                    <button class="mode-tab active" id="off-tab-db" onclick="setOffMode('db')">Use DB Expiry</button>
+                    <button class="mode-tab" id="off-tab-date" onclick="setOffMode('date')">Custom Date</button>
+                    <button class="mode-tab" id="off-tab-lifetime" onclick="setOffMode('lifetime')">Lifetime</button>
+                </div>
+            </div>
+
+            <div id="off-date-wrap" class="form-group" style="display:none;">
+                <div class="form-label">Expiry Date</div>
+                <input type="date" id="off-exact-date" class="form-input">
+            </div>
+            <div id="off-lifetime-wrap" style="display:none;padding:12px;background:rgba(22,163,74,.08);border:1px solid rgba(22,163,74,.2);border-radius:8px;font-size:13px;color:#4ade80;margin-bottom:12px;">♾️ License will never expire.</div>
+
+            <div id="off-result" style="display:none;padding:12px;background:rgba(8,145,178,.08);border:1px solid rgba(8,145,178,.3);border-radius:8px;font-size:12px;color:#67e8f9;margin-bottom:12px;">
+                ✔ License file ready — downloading automatically…
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn-cancel" onclick="closeOfflineModal()">Cancel</button>
+                <button class="btn-primary" onclick="generateOfflineLicense()" style="background:#0891b2;">⬇ Generate &amp; Download</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ── Extend Expiry Modal ── -->
     <div class="modal-overlay" id="extend-modal">
         <div class="modal">
@@ -507,6 +555,82 @@
             document.getElementById('toast-msg').textContent = msg;
             t.className = `show ${type}`;
             setTimeout(() => t.className = '', 3500);
+        }
+
+        // ── Offline Modal ──────────────────────────────────────────────────
+        let offMode = 'db';
+
+        function setOffMode(mode) {
+            offMode = mode;
+            ['db','date','lifetime'].forEach(m => document.getElementById('off-tab-' + m).classList.toggle('active', m === mode));
+            document.getElementById('off-date-wrap').style.display = mode === 'date' ? 'block' : 'none';
+            document.getElementById('off-lifetime-wrap').style.display = mode === 'lifetime' ? 'block' : 'none';
+        }
+
+        function openOfflineModal() {
+            // Populate license key dropdown from loaded licenses
+            const select = document.getElementById('off-key');
+            select.innerHTML = '<option value="">— Select a license key —</option>';
+            allLicenses.filter(l => l.active).forEach(l => {
+                const opt = document.createElement('option');
+                opt.value = l.key;
+                opt.textContent = l.key + (l.machine_id ? ' [Bound]' : ' [Unbound]');
+                select.appendChild(opt);
+            });
+            document.getElementById('off-result').style.display = 'none';
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('off-exact-date').min = today;
+            document.getElementById('offline-modal').classList.add('active');
+        }
+
+        function closeOfflineModal() {
+            document.getElementById('offline-modal').classList.remove('active');
+        }
+
+        async function generateOfflineLicense() {
+            const machine_id = document.getElementById('off-machine-id').value.trim();
+            const key = document.getElementById('off-key').value;
+            if (!machine_id) { showToast('Please enter a Machine ID', 'error'); return; }
+            if (!key) { showToast('Please select a license key', 'error'); return; }
+
+            let expires_at = null;
+            if (offMode === 'date') {
+                const d = document.getElementById('off-exact-date').value;
+                if (!d) { showToast('Please pick an expiry date', 'error'); return; }
+                expires_at = new Date(d + 'T23:59:59Z').toISOString();
+            } else if (offMode === 'lifetime') {
+                expires_at = null; // null = no expiry
+            }
+            // 'db' mode: expires_at not sent, server will use DB value
+
+            const body = { key, machine_id };
+            if (offMode !== 'db') body.expires_at = expires_at;
+
+            try {
+                const res = await fetch('/api/admin/generate-offline', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (!res.ok) { showToast(data.error || 'Failed to generate', 'error'); return; }
+
+                // Trigger browser download of the license.lic file
+                const licContent = JSON.stringify({ license_data: data.license_data, signature: data.signature }, null, 4);
+                const blob = new Blob([licContent], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'license.lic';
+                a.click();
+                URL.revokeObjectURL(url);
+
+                document.getElementById('off-result').style.display = 'block';
+                showToast('license.lic downloaded successfully!');
+                fetchLicenses(); // Refresh to show newly bound machine
+            } catch(e) {
+                showToast('Network error: ' + e.message, 'error');
+            }
         }
 
         // ── Stats ──────────────────────────────────────────────────────────
