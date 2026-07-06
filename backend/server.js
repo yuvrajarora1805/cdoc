@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const rateLimit = require('express-rate-limit');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = 3001;
@@ -24,6 +25,10 @@ const pool = mysql.createPool({
     connectionLimit: 10,
     queueLimit: 0
 });
+
+// RSA keys variables
+let PRIVATE_KEY = null;
+let PUBLIC_KEY = null;
 
 // Initialize tables and default admin
 async function initDB() {
@@ -52,6 +57,13 @@ async function initDB() {
                 )
             `);
 
+            await conn.execute(`
+                CREATE TABLE IF NOT EXISTS settings (
+                    \`key\` VARCHAR(100) PRIMARY KEY,
+                    \`value\` TEXT NOT NULL
+                )
+            `);
+
             // Create default admin if not exists
             const [rows] = await conn.execute("SELECT * FROM admin WHERE username = 'admin'");
             if (rows.length === 0) {
@@ -59,6 +71,32 @@ async function initDB() {
                 await conn.execute("INSERT INTO admin (username, password) VALUES ('admin', ?)", [hash]);
                 console.log('Default admin created: admin / password123');
             }
+
+            // Check or generate RSA Key Pair
+            const [settings] = await conn.execute("SELECT * FROM settings WHERE \`key\` IN ('private_key', 'public_key')");
+            if (settings.length < 2) {
+                console.log('Generating RSA 2048-bit key pair for offline licensing...');
+                const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', {
+                    modulusLength: 2048,
+                    publicKeyEncoding: { type: 'pkcs1', format: 'pem' },
+                    privateKeyEncoding: { type: 'pkcs1', format: 'pem' }
+                });
+                
+                await conn.execute("INSERT INTO settings (\`key\`, \`value\`) VALUES ('private_key', ?), ('public_key', ?) ON DUPLICATE KEY UPDATE \`value\` = VALUES(\`value\`)", [privateKey, publicKey]);
+                PRIVATE_KEY = privateKey;
+                PUBLIC_KEY = publicKey;
+                console.log('Generated and stored RSA key pair.');
+            } else {
+                settings.forEach(s => {
+                    if (s.key === 'private_key') PRIVATE_KEY = s.value;
+                    if (s.key === 'public_key') PUBLIC_KEY = s.value;
+                });
+                console.log('Loaded RSA key pair.');
+            }
+
+            console.log('\n--- RSA PUBLIC KEY FOR OFFLINE EXE (COPY THIS) ---');
+            console.log(PUBLIC_KEY);
+            console.log('--------------------------------------------------\n');
 
             conn.release();
             break;
@@ -202,22 +240,45 @@ app.post('/api/verify', verifyLimiter, async (req, res) => {
         if (!lic.active) return res.json({ valid: false, message: 'License revoked' });
 
         // Check expiry
+        let expiresAtStr = null;
         if (lic.expires_at) {
             const expiry = new Date(lic.expires_at);
             if (expiry < new Date()) {
                 return res.json({ valid: false, message: 'License expired on ' + expiry.toDateString() });
             }
+            expiresAtStr = expiry.toISOString();
         }
 
+        let boundMachineId = lic.machine_id;
         if (!lic.machine_id) {
             // First use — bind to machine
             await pool.execute("UPDATE licenses SET machine_id = ? WHERE `key` = ?", [machine_id, key]);
-            return res.json({ valid: true, message: 'License verified and bound to this machine.' });
+            boundMachineId = machine_id;
         } else if (lic.machine_id !== machine_id) {
             return res.json({ valid: false, message: 'License bound to another machine.' });
         }
 
-        res.json({ valid: true, message: 'License valid' });
+        // Generate RSA Cryptographic Signature of the license payload
+        const licenseData = {
+            key: key,
+            machine_id: boundMachineId,
+            expires_at: expiresAtStr
+        };
+
+        const dataToSign = JSON.stringify(licenseData);
+        
+        // Sign using the RSA private key
+        const sign = crypto.createSign('SHA256');
+        sign.update(dataToSign);
+        sign.end();
+        const signature = sign.sign(PRIVATE_KEY, 'hex');
+
+        res.json({ 
+            valid: true, 
+            message: 'License valid',
+            license_data: licenseData,
+            signature: signature
+        });
     } catch (err) {
         res.status(500).json({ valid: false, message: 'Server error: ' + err.message });
     }
