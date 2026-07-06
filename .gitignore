@@ -1,0 +1,14 @@
+# Python build artifacts
+app/build/
+app/dist/
+app/__pycache__/
+app/carm_multi_viewer/__pycache__/
+app/carm_multi_viewer/readers/__pycache__/
+app/*.c
+app/*.pyd
+
+# Compiled icon (can be regenerated)
+app/icon.ico
+
+# Node modules
+backend/node_modules/

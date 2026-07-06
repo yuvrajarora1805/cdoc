@@ -2,209 +2,695 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Dashboard - License Manager</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HelixCare | License Manager</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg: #0d1117;
+            --surface: #161b22;
+            --surface2: #1c2333;
+            --border: #30363d;
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --success: #16a34a;
+            --warning: #d97706;
+            --danger: #dc2626;
+            --text: #e6edf3;
+            --text-muted: #8b949e;
+            --text-dim: #6e7681;
+            --teal: #0891b2;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* ── Nav ── */
+        nav {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0 32px;
+            height: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .nav-logo {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #2563eb, #0891b2);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+        .nav-title { font-weight: 700; font-size: 18px; }
+        .nav-subtitle { font-size: 11px; color: var(--text-muted); font-weight: 400; }
+        .nav-right { display: flex; align-items: center; gap: 16px; }
+        .nav-user { font-size: 13px; color: var(--text-muted); }
+        .btn-logout {
+            font-size: 13px;
+            color: var(--danger);
+            background: rgba(220, 38, 38, 0.08);
+            border: 1px solid rgba(220, 38, 38, 0.2);
+            border-radius: 6px;
+            padding: 6px 14px;
+            cursor: pointer;
+            transition: all .2s;
+        }
+        .btn-logout:hover { background: rgba(220, 38, 38, 0.16); }
+
+        /* ── Main ── */
+        main { max-width: 1300px; margin: 0 auto; padding: 32px; }
+
+        /* ── Stats Row ── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+        .stat-label { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .05em; }
+        .stat-value { font-size: 28px; font-weight: 700; }
+        .stat-value.blue { color: #3b82f6; }
+        .stat-value.green { color: #22c55e; }
+        .stat-value.orange { color: #f59e0b; }
+        .stat-value.red { color: #ef4444; }
+
+        /* ── Table Card ── */
+        .table-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+        }
+        .table-header h2 { font-size: 16px; font-weight: 600; }
+        .search-wrap {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .search-input {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 13px;
+            color: var(--text);
+            outline: none;
+            width: 220px;
+            transition: border .2s;
+        }
+        .search-input::placeholder { color: var(--text-dim); }
+        .search-input:focus { border-color: var(--primary); }
+
+        .btn-primary {
+            background: var(--primary);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 9px 18px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background .2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-primary:hover { background: var(--primary-hover); }
+
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        thead { background: var(--surface2); }
+        th { padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+        td { padding: 14px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: rgba(255,255,255,.02); }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .badge.active { background: rgba(22,163,74,.15); color: #4ade80; border: 1px solid rgba(22,163,74,.3); }
+        .badge.revoked { background: rgba(220,38,38,.15); color: #f87171; border: 1px solid rgba(220,38,38,.3); }
+
+        .machine-bound { font-family: monospace; font-size: 11px; color: var(--text-muted); }
+        .machine-unbound { font-size: 11px; color: var(--text-dim); font-style: italic; }
+
+        .expiry-ok { color: #4ade80; font-size: 12px; }
+        .expiry-warn { color: #fbbf24; font-size: 12px; }
+        .expiry-expired { color: #f87171; font-size: 12px; }
+        .expiry-none { color: var(--text-dim); font-size: 12px; font-style: italic; }
+
+        .key-text { font-family: monospace; font-size: 11px; color: #93c5fd; }
+
+        .action-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: all .15s;
+        }
+        .action-btn.extend { color: #34d399; }
+        .action-btn.extend:hover { background: rgba(52, 211, 153, .1); }
+        .action-btn.reset { color: #fbbf24; }
+        .action-btn.reset:hover { background: rgba(251, 191, 36, .1); }
+        .action-btn.revoke { color: #f87171; }
+        .action-btn.revoke:hover { background: rgba(248, 113, 113, .1); }
+        .action-btn.copy { color: #60a5fa; }
+        .action-btn.copy:hover { background: rgba(96, 165, 250, .1); }
+
+        /* ── Modal ── */
+        .modal-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,.65);
+            backdrop-filter: blur(4px);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 200;
+            opacity: 0; pointer-events: none;
+            transition: opacity .2s;
+        }
+        .modal-overlay.active { opacity: 1; pointer-events: all; }
+        .modal {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 28px;
+            width: 100%;
+            max-width: 460px;
+            transform: translateY(12px);
+            transition: transform .2s;
+        }
+        .modal-overlay.active .modal { transform: translateY(0); }
+        .modal h3 { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
+        .modal .subtitle { font-size: 12px; color: var(--text-muted); margin-bottom: 24px; }
+
+        .form-group { margin-bottom: 18px; }
+        .form-label { display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .05em; }
+        .form-select, .form-input {
+            width: 100%;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 14px;
+            color: var(--text);
+            outline: none;
+            transition: border .2s;
+            font-family: 'Inter', sans-serif;
+        }
+        .form-select:focus, .form-input:focus { border-color: var(--primary); }
+        .form-input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+
+        .mode-tabs {
+            display: flex;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 3px;
+            margin-bottom: 18px;
+        }
+        .mode-tab {
+            flex: 1;
+            text-align: center;
+            padding: 7px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            border: none;
+            background: none;
+            color: var(--text-muted);
+            transition: all .2s;
+        }
+        .mode-tab.active { background: var(--primary); color: #fff; }
+
+        .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+        .btn-cancel {
+            padding: 9px 18px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: none;
+            color: var(--text-muted);
+            font-size: 13px;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            transition: all .2s;
+        }
+        .btn-cancel:hover { background: var(--surface2); }
+        .btn-success {
+            background: var(--success);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 9px 18px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            transition: background .2s;
+        }
+        .btn-success:hover { background: #15803d; }
+
+        /* ── Toast ── */
+        #toast {
+            position: fixed;
+            bottom: 28px; right: 28px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px 20px;
+            font-size: 13px;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 8px 32px rgba(0,0,0,.4);
+            opacity: 0;
+            transform: translateY(12px);
+            transition: all .3s;
+            z-index: 999;
+            pointer-events: none;
+        }
+        #toast.show { opacity: 1; transform: translateY(0); }
+        #toast.success .toast-icon { color: #4ade80; }
+        #toast.error .toast-icon { color: #f87171; }
+
+        /* Empty state */
+        .empty-state { text-align: center; padding: 60px 20px; color: var(--text-dim); }
+        .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
+
+        /* Result box */
+        .result-box {
+            background: var(--surface2);
+            border: 1px solid rgba(37,99,235,.3);
+            border-radius: 8px;
+            padding: 14px;
+            font-family: monospace;
+            font-size: 13px;
+            color: #93c5fd;
+            word-break: break-all;
+            margin-top: 12px;
+            display: none;
+        }
+        .result-box.show { display: block; }
+    </style>
 </head>
-<body class="bg-gray-50 min-h-screen">
-    <nav class="bg-white shadow px-6 py-4 flex justify-between items-center">
-        <h1 class="text-xl font-bold text-gray-800">🔑 License Manager</h1>
-        <button onclick="logout()" class="text-red-600 hover:underline">Logout</button>
+<body>
+    <nav>
+        <div class="nav-brand">
+            <div class="nav-logo">🧬</div>
+            <div>
+                <div class="nav-title">HelixCare</div>
+                <div class="nav-subtitle">by Omvky — License Manager</div>
+            </div>
+        </div>
+        <div class="nav-right">
+            <span class="nav-user" id="nav-user">Admin</span>
+            <button class="btn-logout" onclick="logout()">Logout</button>
+        </div>
     </nav>
 
-    <main class="max-w-7xl mx-auto p-6">
-        <div class="flex justify-between items-center mb-6">
-            <h2 class="text-2xl font-semibold">Active Licenses</h2>
-            <button onclick="openGenerateModal()" class="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 transition">
-                + Generate New License
-            </button>
+    <main>
+        <!-- Stats -->
+        <div class="stats-grid" id="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Total Licenses</div>
+                <div class="stat-value blue" id="stat-total">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Active</div>
+                <div class="stat-value green" id="stat-active">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Expiring Soon</div>
+                <div class="stat-value orange" id="stat-expiring">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Revoked</div>
+                <div class="stat-value red" id="stat-revoked">—</div>
+            </div>
         </div>
 
-        <div class="bg-white rounded shadow overflow-x-auto">
-            <table class="w-full text-left border-collapse text-sm">
-                <thead class="bg-gray-100 text-gray-600">
-                    <tr>
-                        <th class="p-4 border-b">ID</th>
-                        <th class="p-4 border-b">License Key</th>
-                        <th class="p-4 border-b">Bound Machine ID</th>
-                        <th class="p-4 border-b">Status</th>
-                        <th class="p-4 border-b">Expiry Date</th>
-                        <th class="p-4 border-b">Created</th>
-                        <th class="p-4 border-b">Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="table-body">
-                    <!-- Rows injected via JS -->
-                </tbody>
-            </table>
+        <!-- Table -->
+        <div class="table-card">
+            <div class="table-header">
+                <h2>🔑 License Keys</h2>
+                <div class="search-wrap">
+                    <input id="search-box" class="search-input" type="text" placeholder="Search key or machine ID…" oninput="filterTable()">
+                    <button class="btn-primary" onclick="openGenerateModal()">
+                        <span>＋</span> Generate License
+                    </button>
+                </div>
+            </div>
+            <div style="overflow-x:auto">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>License Key</th>
+                            <th>Bound Machine ID</th>
+                            <th>Status</th>
+                            <th>Expiry Date</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body">
+                        <tr><td colspan="7"><div class="empty-state"><div class="icon">⏳</div>Loading…</div></td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </main>
 
-    <!-- Generate License Modal -->
-    <div id="generate-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
-        <div class="bg-white rounded-lg shadow-xl p-6 w-96">
-            <h3 class="text-lg font-bold mb-4">Generate New License</h3>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Validity (days)</label>
-            <select id="gen-days" class="w-full border rounded px-3 py-2 mb-4">
-                <option value="30">30 days (1 Month)</option>
-                <option value="90">90 days (3 Months)</option>
-                <option value="180">180 days (6 Months)</option>
-                <option value="365" selected>365 days (1 Year)</option>
-                <option value="730">730 days (2 Years)</option>
-                <option value="custom">Custom...</option>
-            </select>
-            <div id="custom-days-wrapper" class="hidden mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Custom Days</label>
-                <input type="number" id="custom-days" min="1" placeholder="e.g. 60" class="w-full border rounded px-3 py-2" />
+    <!-- ── Generate License Modal ── -->
+    <div class="modal-overlay" id="generate-modal">
+        <div class="modal">
+            <h3>🔑 Generate New License</h3>
+            <div class="subtitle">A unique key will be created and stored in the database.</div>
+
+            <div class="form-group">
+                <div class="form-label">Expiry Type</div>
+                <div class="mode-tabs">
+                    <button class="mode-tab active" id="tab-preset" onclick="setGenMode('preset')">Preset Duration</button>
+                    <button class="mode-tab" id="tab-custom" onclick="setGenMode('custom')">Custom Date</button>
+                    <button class="mode-tab" id="tab-lifetime" onclick="setGenMode('lifetime')">Lifetime</button>
+                </div>
             </div>
-            <div class="flex justify-end gap-3">
-                <button onclick="closeGenerateModal()" class="px-4 py-2 text-gray-600 hover:underline">Cancel</button>
-                <button onclick="generateLicense()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Generate</button>
+
+            <div id="gen-preset-wrap" class="form-group">
+                <div class="form-label">Duration</div>
+                <select id="gen-days" class="form-select">
+                    <option value="30">30 days (1 Month)</option>
+                    <option value="90">90 days (3 Months)</option>
+                    <option value="180">180 days (6 Months)</option>
+                    <option value="365" selected>365 days (1 Year)</option>
+                    <option value="730">730 days (2 Years)</option>
+                    <option value="custom">Custom number of days…</option>
+                </select>
+                <div id="gen-custom-days-wrap" class="hidden" style="margin-top:10px;">
+                    <input type="number" id="gen-custom-days" class="form-input" min="1" placeholder="Enter number of days (e.g. 60)">
+                </div>
+            </div>
+
+            <div id="gen-date-wrap" class="form-group" style="display:none;">
+                <div class="form-label">Expiry Date</div>
+                <input type="date" id="gen-exact-date" class="form-input">
+                <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">The license will expire at the end of this day (23:59:59 UTC).</div>
+            </div>
+
+            <div id="gen-lifetime-wrap" style="display:none;padding:14px;background:rgba(22,163,74,.08);border:1px solid rgba(22,163,74,.2);border-radius:8px;font-size:13px;color:#4ade80;">
+                ♾️ This license will never expire.
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn-cancel" onclick="closeGenerateModal()">Cancel</button>
+                <button class="btn-success" onclick="generateLicense()">Generate Key</button>
             </div>
         </div>
     </div>
 
-    <!-- Extend Expiry Modal -->
-    <div id="extend-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
-        <div class="bg-white rounded-lg shadow-xl p-6 w-96">
-            <h3 class="text-lg font-bold mb-1">Extend License Expiry</h3>
-            <p id="extend-key-label" class="text-xs text-gray-500 font-mono mb-4 break-all"></p>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Extend by (days)</label>
-            <select id="extend-days" class="w-full border rounded px-3 py-2 mb-4">
-                <option value="30">30 days</option>
-                <option value="90">90 days</option>
-                <option value="180">180 days</option>
-                <option value="365" selected>365 days</option>
-                <option value="custom">Custom...</option>
-            </select>
-            <div id="extend-custom-wrapper" class="hidden mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Custom Days</label>
-                <input type="number" id="extend-custom-days" min="1" placeholder="e.g. 60" class="w-full border rounded px-3 py-2" />
+    <!-- ── Extend Expiry Modal ── -->
+    <div class="modal-overlay" id="extend-modal">
+        <div class="modal">
+            <h3>📅 Extend License Expiry</h3>
+            <div class="subtitle" id="extend-key-label" style="font-family:monospace;font-size:11px;color:#93c5fd;word-break:break-all;"></div>
+
+            <div class="form-group">
+                <div class="form-label">Extend Method</div>
+                <div class="mode-tabs">
+                    <button class="mode-tab active" id="ext-tab-preset" onclick="setExtMode('preset')">Add Days</button>
+                    <button class="mode-tab" id="ext-tab-date" onclick="setExtMode('date')">Set Exact Date</button>
+                </div>
             </div>
-            <div class="flex justify-end gap-3">
-                <button onclick="closeExtendModal()" class="px-4 py-2 text-gray-600 hover:underline">Cancel</button>
-                <button onclick="submitExtend()" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">Extend</button>
+
+            <div id="ext-preset-wrap" class="form-group">
+                <div class="form-label">Extend By</div>
+                <select id="extend-days" class="form-select">
+                    <option value="30">30 days</option>
+                    <option value="90">90 days</option>
+                    <option value="180">180 days</option>
+                    <option value="365" selected>365 days (1 Year)</option>
+                    <option value="custom">Custom…</option>
+                </select>
+                <div id="extend-custom-wrap" style="display:none;margin-top:10px;">
+                    <input type="number" id="extend-custom-days" class="form-input" min="1" placeholder="Number of days">
+                </div>
+            </div>
+
+            <div id="ext-date-wrap" class="form-group" style="display:none;">
+                <div class="form-label">New Expiry Date</div>
+                <input type="date" id="extend-exact-date" class="form-input">
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn-cancel" onclick="closeExtendModal()">Cancel</button>
+                <button class="btn-success" onclick="submitExtend()">Extend License</button>
             </div>
         </div>
     </div>
+
+    <!-- Toast -->
+    <div id="toast"><span class="toast-icon" id="toast-icon"></span><span id="toast-msg"></span></div>
 
     <script>
         const token = localStorage.getItem('token');
         if (!token) window.location.href = 'login.html';
 
         let currentExtendKey = null;
+        let allLicenses = [];
+        let genMode = 'preset';
+        let extMode = 'preset';
 
-        // ── Modal: Generate ─────────────────────────────────────────────
-        function openGenerateModal() {
-            document.getElementById('generate-modal').classList.remove('hidden');
+        // ── Toast ──────────────────────────────────────────────────────────
+        function showToast(msg, type = 'success') {
+            const t = document.getElementById('toast');
+            document.getElementById('toast-icon').textContent = type === 'success' ? '✔' : '✖';
+            document.getElementById('toast-msg').textContent = msg;
+            t.className = `show ${type}`;
+            setTimeout(() => t.className = '', 3500);
         }
-        function closeGenerateModal() {
-            document.getElementById('generate-modal').classList.add('hidden');
-        }
-        document.getElementById('gen-days').addEventListener('change', function() {
-            document.getElementById('custom-days-wrapper').classList.toggle('hidden', this.value !== 'custom');
-        });
 
-        // ── Modal: Extend ────────────────────────────────────────────────
-        function openExtendModal(key) {
-            currentExtendKey = key;
-            document.getElementById('extend-key-label').textContent = key;
-            document.getElementById('extend-modal').classList.remove('hidden');
+        // ── Stats ──────────────────────────────────────────────────────────
+        function updateStats(licenses) {
+            document.getElementById('stat-total').textContent = licenses.length;
+            document.getElementById('stat-active').textContent = licenses.filter(l => l.active).length;
+            document.getElementById('stat-revoked').textContent = licenses.filter(l => !l.active).length;
+            const expiringSoon = licenses.filter(l => {
+                if (!l.expires_at || !l.active) return false;
+                const days = Math.ceil((new Date(l.expires_at) - new Date()) / 86400000);
+                return days >= 0 && days <= 30;
+            }).length;
+            document.getElementById('stat-expiring').textContent = expiringSoon;
         }
-        function closeExtendModal() {
-            document.getElementById('extend-modal').classList.add('hidden');
-            currentExtendKey = null;
-        }
-        document.getElementById('extend-days').addEventListener('change', function() {
-            document.getElementById('extend-custom-wrapper').classList.toggle('hidden', this.value !== 'custom');
-        });
 
-        // ── Fetch & Render Licenses ──────────────────────────────────────
+        // ── Fetch & Render ─────────────────────────────────────────────────
         async function fetchLicenses() {
-            const res = await fetch('/api/admin/licenses', {
-                headers: { 'Authorization': 'Bearer ' + token }
-            });
+            const res = await fetch('/api/admin/licenses', { headers: { 'Authorization': 'Bearer ' + token } });
             if (res.status === 403 || res.status === 401) { logout(); return; }
+            allLicenses = await res.json();
+            updateStats(allLicenses);
+            renderTable(allLicenses);
+        }
 
-            const data = await res.json();
+        function filterTable() {
+            const q = document.getElementById('search-box').value.toLowerCase();
+            renderTable(allLicenses.filter(l =>
+                (l.key || '').toLowerCase().includes(q) ||
+                (l.machine_id || '').toLowerCase().includes(q)
+            ));
+        }
+
+        function renderTable(licenses) {
             const tbody = document.getElementById('table-body');
+            if (!licenses.length) {
+                tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="icon">🔍</div>No licenses found.</div></td></tr>`;
+                return;
+            }
             tbody.innerHTML = '';
-
-            data.forEach(lic => {
+            licenses.forEach(lic => {
                 const statusHtml = lic.active
-                    ? `<span class="bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-semibold">Active</span>`
-                    : `<span class="bg-red-100 text-red-800 px-2 py-1 rounded text-xs font-semibold">Revoked</span>`;
+                    ? `<span class="badge active">● Active</span>`
+                    : `<span class="badge revoked">✖ Revoked</span>`;
 
                 const machineId = lic.machine_id
-                    ? `<span class="font-mono text-xs">${lic.machine_id}</span>`
-                    : `<span class="text-gray-400 italic text-xs">Unbound</span>`;
+                    ? `<span class="machine-bound">${lic.machine_id}</span>`
+                    : `<span class="machine-unbound">Unbound</span>`;
 
-                // Expiry display
-                let expiryHtml = '<span class="text-gray-400 italic text-xs">No expiry</span>';
+                let expiryHtml = '<span class="expiry-none">♾ Lifetime</span>';
                 if (lic.expires_at) {
                     const expDate = new Date(lic.expires_at);
-                    const now = new Date();
-                    const daysLeft = Math.ceil((expDate - now) / (1000 * 60 * 60 * 24));
-                    const dateStr = expDate.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
-
-                    if (daysLeft < 0) {
-                        expiryHtml = `<span class="text-red-600 font-semibold text-xs">Expired (${dateStr})</span>`;
-                    } else if (daysLeft <= 30) {
-                        expiryHtml = `<span class="text-orange-500 font-semibold text-xs">⚠ ${dateStr} (${daysLeft}d left)</span>`;
-                    } else {
-                        expiryHtml = `<span class="text-green-700 text-xs">${dateStr} (${daysLeft}d left)</span>`;
-                    }
+                    const daysLeft = Math.ceil((expDate - new Date()) / 86400000);
+                    const dateStr = expDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+                    if (daysLeft < 0) expiryHtml = `<span class="expiry-expired">✖ Expired (${dateStr})</span>`;
+                    else if (daysLeft <= 30) expiryHtml = `<span class="expiry-warn">⚠ ${dateStr} (${daysLeft}d left)</span>`;
+                    else expiryHtml = `<span class="expiry-ok">✔ ${dateStr} (${daysLeft}d left)</span>`;
                 }
 
                 const createdStr = lic.created_at
-                    ? new Date(lic.created_at).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })
+                    ? new Date(lic.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
                     : '—';
 
+                const revokeBtn = lic.active
+                    ? `<button class="action-btn revoke" onclick="revoke('${lic.key}')">✖ Revoke</button>`
+                    : '';
+
                 tbody.innerHTML += `
-                    <tr class="border-b hover:bg-gray-50 transition">
-                        <td class="p-4 text-gray-500">${lic.id}</td>
-                        <td class="p-4 font-mono text-xs">${lic.key}</td>
-                        <td class="p-4">${machineId}</td>
-                        <td class="p-4">${statusHtml}</td>
-                        <td class="p-4">${expiryHtml}</td>
-                        <td class="p-4 text-xs text-gray-500">${createdStr}</td>
-                        <td class="p-4 flex flex-wrap gap-2">
-                            <button onclick="openExtendModal('${lic.key}')" class="text-green-600 hover:underline text-xs">Extend</button>
-                            <button onclick="resetMachine('${lic.key}')" class="text-orange-500 hover:underline text-xs">Reset HWID</button>
-                            ${lic.active ? `<button onclick="revoke('${lic.key}')" class="text-red-600 hover:underline text-xs">Revoke</button>` : ''}
+                    <tr>
+                        <td style="color:var(--text-dim)">${lic.id}</td>
+                        <td class="key-text">${lic.key}</td>
+                        <td>${machineId}</td>
+                        <td>${statusHtml}</td>
+                        <td>${expiryHtml}</td>
+                        <td style="color:var(--text-muted);font-size:12px">${createdStr}</td>
+                        <td>
+                            <button class="action-btn copy" onclick="copyKey('${lic.key}')">⎘ Copy</button>
+                            <button class="action-btn extend" onclick="openExtendModal('${lic.key}')">↑ Extend</button>
+                            <button class="action-btn reset" onclick="resetMachine('${lic.key}')">↻ Reset HWID</button>
+                            ${revokeBtn}
                         </td>
-                    </tr>
-                `;
+                    </tr>`;
             });
         }
 
-        // ── Generate License ─────────────────────────────────────────────
-        async function generateLicense() {
-            const select = document.getElementById('gen-days');
-            let days = select.value === 'custom'
-                ? parseInt(document.getElementById('custom-days').value)
-                : parseInt(select.value);
+        // ── Copy Key ──────────────────────────────────────────────────────
+        function copyKey(key) {
+            navigator.clipboard.writeText(key).then(() => showToast('License key copied!'));
+        }
 
-            if (!days || days < 1) { alert('Please enter a valid number of days.'); return; }
+        // ── Generate Modal ─────────────────────────────────────────────────
+        function setGenMode(mode) {
+            genMode = mode;
+            document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+            document.getElementById('tab-' + mode).classList.add('active');
+            document.getElementById('gen-preset-wrap').style.display = mode === 'preset' ? 'block' : 'none';
+            document.getElementById('gen-date-wrap').style.display = mode === 'custom' ? 'block' : 'none';
+            document.getElementById('gen-lifetime-wrap').style.display = mode === 'lifetime' ? 'block' : 'none';
+        }
+
+        document.getElementById('gen-days').addEventListener('change', function () {
+            document.getElementById('gen-custom-days-wrap').style.display = this.value === 'custom' ? 'block' : 'none';
+        });
+
+        function openGenerateModal() {
+            // Set min date to today
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('gen-exact-date').min = today;
+            document.getElementById('generate-modal').classList.add('active');
+        }
+
+        function closeGenerateModal() {
+            document.getElementById('generate-modal').classList.remove('active');
+        }
+
+        async function generateLicense() {
+            let body = {};
+            if (genMode === 'lifetime') {
+                body = { days: 36500 }; // ~100 years
+            } else if (genMode === 'custom') {
+                const d = document.getElementById('gen-exact-date').value;
+                if (!d) { showToast('Please pick a date', 'error'); return; }
+                const ms = Math.ceil((new Date(d + 'T23:59:59Z') - new Date()) / 86400000);
+                if (ms < 1) { showToast('Date must be in the future', 'error'); return; }
+                body = { days: ms };
+            } else {
+                const sel = document.getElementById('gen-days');
+                const days = sel.value === 'custom'
+                    ? parseInt(document.getElementById('gen-custom-days').value)
+                    : parseInt(sel.value);
+                if (!days || days < 1) { showToast('Enter valid days', 'error'); return; }
+                body = { days };
+            }
 
             const res = await fetch('/api/admin/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                body: JSON.stringify({ days })
+                body: JSON.stringify(body)
             });
             const data = await res.json();
             closeGenerateModal();
-            alert('✅ License Generated!\n\n' + data.key + '\n\nExpires: ' + new Date(data.expires_at).toDateString());
+            showToast('License generated: ' + data.key);
             fetchLicenses();
         }
 
-        // ── Extend Expiry ────────────────────────────────────────────────
-        async function submitExtend() {
-            const select = document.getElementById('extend-days');
-            let days = select.value === 'custom'
-                ? parseInt(document.getElementById('extend-custom-days').value)
-                : parseInt(select.value);
+        // ── Extend Modal ───────────────────────────────────────────────────
+        function setExtMode(mode) {
+            extMode = mode;
+            document.getElementById('ext-tab-preset').classList.toggle('active', mode === 'preset');
+            document.getElementById('ext-tab-date').classList.toggle('active', mode === 'date');
+            document.getElementById('ext-preset-wrap').style.display = mode === 'preset' ? 'block' : 'none';
+            document.getElementById('ext-date-wrap').style.display = mode === 'date' ? 'block' : 'none';
+        }
 
-            if (!days || days < 1) { alert('Please enter a valid number of days.'); return; }
+        document.getElementById('extend-days').addEventListener('change', function () {
+            document.getElementById('extend-custom-wrap').style.display = this.value === 'custom' ? 'block' : 'none';
+        });
+
+        function openExtendModal(key) {
+            currentExtendKey = key;
+            document.getElementById('extend-key-label').textContent = key;
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('extend-exact-date').min = today;
+            document.getElementById('extend-modal').classList.add('active');
+        }
+
+        function closeExtendModal() {
+            document.getElementById('extend-modal').classList.remove('active');
+            currentExtendKey = null;
+        }
+
+        async function submitExtend() {
+            let days;
+            if (extMode === 'date') {
+                const d = document.getElementById('extend-exact-date').value;
+                if (!d) { showToast('Please pick a date', 'error'); return; }
+                days = Math.ceil((new Date(d + 'T23:59:59Z') - new Date()) / 86400000);
+                if (days < 1) { showToast('Date must be in the future', 'error'); return; }
+            } else {
+                const sel = document.getElementById('extend-days');
+                days = sel.value === 'custom'
+                    ? parseInt(document.getElementById('extend-custom-days').value)
+                    : parseInt(sel.value);
+                if (!days || days < 1) { showToast('Enter valid days', 'error'); return; }
+            }
 
             const res = await fetch('/api/admin/extend', {
                 method: 'POST',
@@ -213,29 +699,31 @@
             });
             const data = await res.json();
             closeExtendModal();
-            alert('✅ License Extended!\n\nNew Expiry: ' + new Date(data.new_expiry).toDateString());
+            showToast('License extended to ' + new Date(data.new_expiry).toDateString());
             fetchLicenses();
         }
 
-        // ── Reset HWID ───────────────────────────────────────────────────
+        // ── Reset HWID ─────────────────────────────────────────────────────
         async function resetMachine(key) {
-            if (!confirm('Reset hardware lock for this license?')) return;
+            if (!confirm('Reset hardware lock for this license? The next machine to activate it will become the new bound machine.')) return;
             await fetch('/api/admin/reset', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
                 body: JSON.stringify({ key })
             });
+            showToast('Hardware ID reset successfully');
             fetchLicenses();
         }
 
-        // ── Revoke ───────────────────────────────────────────────────────
+        // ── Revoke ─────────────────────────────────────────────────────────
         async function revoke(key) {
-            if (!confirm('Revoke this license permanently?')) return;
+            if (!confirm('Permanently revoke this license? This cannot be undone.')) return;
             await fetch('/api/admin/revoke', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
                 body: JSON.stringify({ key })
             });
+            showToast('License revoked', 'error');
             fetchLicenses();
         }
 
@@ -244,7 +732,6 @@
             window.location.href = 'login.html';
         }
 
-        // Init
         fetchLicenses();
     </script>
 </body>
