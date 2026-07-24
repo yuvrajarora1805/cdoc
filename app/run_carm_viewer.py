@@ -10,8 +10,12 @@ from tkinter import messagebox, filedialog
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.serialization import load_pem_public_key
-from carm_multi_viewer.gui import run
+import base64
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.fernet import Fernet
+import importlib.util
 
+# Removed static import of gui to allow dynamic decrypted loading
 # ── HARDCODED RSA PUBLIC KEY ──────────────────────────────────────────────────
 # IMPORTANT: Replace the dummy key below with your ACTUAL RSA PUBLIC KEY!
 # You can find your real public key by looking at the logs of your backend server,
@@ -31,6 +35,44 @@ LICENSE_FILE = "license.lic"
 
 def get_machine_id():
     return str(uuid.getnode())
+
+def derive_key(signature_hex, machine_id):
+    """Derives a Fernet-compatible key using PBKDF2."""
+    salt = machine_id.encode('utf-8')
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=100000,
+    )
+    return base64.urlsafe_b64encode(kdf.derive(signature_hex.encode('utf-8')))
+
+def check_time_tampering():
+    """Checks if the system clock has been rolled back."""
+    time_file = os.path.join(os.getenv('APPDATA', ''), 'HelixCare', 'sys_time.dat')
+    os.makedirs(os.path.dirname(time_file), exist_ok=True)
+    
+    current_time = datetime.datetime.now(datetime.timezone.utc)
+    
+    if os.path.exists(time_file):
+        try:
+            with open(time_file, "r") as f:
+                last_time_str = f.read().strip()
+            last_time = datetime.datetime.fromisoformat(last_time_str)
+            if current_time < last_time:
+                return False, f"Time tampering detected! System clock was rolled back.\nLast run: {last_time}\nCurrent time: {current_time}"
+        except Exception:
+            pass # File corrupted or unreadable, ignore for now
+            
+    # Update the time file
+    try:
+        with open(time_file, "w") as f:
+            f.write(current_time.isoformat())
+    except Exception:
+        pass
+        
+    return True, ""
+
 
 def verify_signature_offline(license_data, signature_hex):
     """Verifies RSA signature of the license data using the hardcoded Public Key."""
@@ -71,9 +113,9 @@ def validate_license_offline():
             now = datetime.datetime.now(datetime.timezone.utc)
             if expires_at < now:
                 return False, f"License expired on {expires_at.strftime('%Y-%m-%d %H:%M:%S')} UTC"
-        return True, "License valid (Offline)"
+        return True, "License valid (Offline)", derive_key(signature, local_machine)
     except Exception as e:
-        return False, f"Error reading license: {str(e)}"
+        return False, f"Error reading license: {str(e)}", None
 
 def activate_license_online(key):
     """Hits the online endpoint to bind machine and fetch signed license payload."""
@@ -91,12 +133,12 @@ def activate_license_online(key):
                         "license_data": data["license_data"],
                         "signature": data["signature"]
                     }, f, indent=4)
-                return True, "License activated successfully!"
+                return True, "License activated successfully!", derive_key(data["signature"], machine_id)
             else:
-                return False, data.get("message", "Invalid license key.")
-        return False, f"Server returned error code {response.status_code}"
+                return False, data.get("message", "Invalid license key."), None
+        return False, f"Server returned error code {response.status_code}", None
     except requests.RequestException as e:
-        return False, f"Could not connect to activation server: {str(e)}"
+        return False, f"Could not connect to activation server: {str(e)}", None
 
 def show_activation_window():
     """
@@ -229,12 +271,53 @@ def show_activation_window():
     win.mainloop()
     return result
 
+def load_and_run_core(decryption_key=None):
+    """Dynamically decrypts and loads the core GUI module, or runs the unencrypted one if in dev mode."""
+    # Check time tampering
+    time_ok, time_msg = check_time_tampering()
+    if not time_ok:
+        root = tk.Tk(); root.withdraw()
+        messagebox.showerror("Security Error", time_msg)
+        sys.exit(1)
+
+    enc_path = os.path.join(os.path.dirname(__file__), "carm_multi_viewer", "gui_encrypted.enc")
+    dev_path = os.path.join(os.path.dirname(__file__), "carm_multi_viewer", "gui.py")
+
+    if os.path.exists(enc_path) and decryption_key:
+        try:
+            f = Fernet(decryption_key)
+            with open(enc_path, "rb") as file:
+                encrypted_data = file.read()
+            decrypted_code = f.decrypt(encrypted_data)
+            
+            # Dynamically load the decrypted code as a module
+            spec = importlib.util.spec_from_loader('carm_multi_viewer.gui', loader=None)
+            gui_module = importlib.util.module_from_spec(spec)
+            sys.modules['carm_multi_viewer.gui'] = gui_module
+            exec(decrypted_code, gui_module.__dict__)
+            
+            print("Successfully decrypted and loaded core application logic.")
+            gui_module.run()
+        except Exception as e:
+            root = tk.Tk(); root.withdraw()
+            messagebox.showerror("Security Error", f"Failed to decrypt core application. License key is invalid or tampered.\n{e}")
+            sys.exit(1)
+    elif os.path.exists(dev_path):
+        print("Running unencrypted core (Dev Mode).")
+        from carm_multi_viewer.gui import run
+        run()
+    else:
+        root = tk.Tk(); root.withdraw()
+        messagebox.showerror("Error", "Core application files are missing.")
+        sys.exit(1)
+
+
 def main():
     # 1. Attempt offline verification first
-    valid, message = validate_license_offline()
+    valid, message, derived_key = validate_license_offline()
     if valid:
         print("Offline verification successful. Starting viewer...")
-        run()
+        load_and_run_core(derived_key)
         sys.exit(0)
 
     # 2. If a license file exists but is invalid, warn the user
@@ -255,12 +338,12 @@ def main():
 
         if result["action"] == "imported":
             # Re-validate the imported file
-            valid, msg = validate_license_offline()
+            valid, msg, derived_key = validate_license_offline()
             if valid:
                 root = tk.Tk(); root.withdraw()
                 messagebox.showinfo("Activated!", "License imported and verified successfully! Starting HelixCare...")
                 root.destroy()
-                run()
+                load_and_run_core(derived_key)
                 sys.exit(0)
             else:
                 root = tk.Tk(); root.withdraw()
@@ -271,12 +354,12 @@ def main():
                 continue
 
         elif result["action"] == "online":
-            success, act_msg = activate_license_online(result["key"])
+            success, act_msg, derived_key = activate_license_online(result["key"])
             if success:
                 root = tk.Tk(); root.withdraw()
                 messagebox.showinfo("Activated!", "License activated successfully! Starting HelixCare...")
                 root.destroy()
-                run()
+                load_and_run_core(derived_key)
                 sys.exit(0)
             else:
                 root = tk.Tk(); root.withdraw()
